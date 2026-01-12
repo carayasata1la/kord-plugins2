@@ -2,7 +2,7 @@ const { kord } = require(process.cwd() + "/core");
 
 kord(
   {
-    cmd: "ping",
+    cmd: "pingme",
     desc: "Check if bot is online",
     fromMe: false,
     type: "general"
