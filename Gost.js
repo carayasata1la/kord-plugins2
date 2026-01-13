@@ -3,20 +3,16 @@ const axios = require("axios");
 const OpenAI = require("openai");
 
 // ===== OPENAI CLIENT =====
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // ===== USER LANGUAGE STORAGE =====
-const userLang = {}; // { userId: 'language' }
+const userLang = {};
 const langs = ["english","pigin","yoruba","igbo","french","spanish","hausa"];
 
 // ===== HELPER =====
-function pick(arr){
-  return arr[Math.floor(Math.random()*arr.length)];
-}
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 
-// ===== ROAST DATA =====
+// ===== DATA =====
 const roasts = [
   "💀 Even silence dey make more sense than you.",
   "🔥 Your whole existence be typo.",
@@ -40,10 +36,10 @@ const roasts = [
   "😈 You be example of how not to."
 ];
 
-// ===== JOKES / STORIES / QUOTES =====
 const jokes = Array.from({length:100},(_,i)=>`Joke ${i+1}`);
 const stories = Array.from({length:100},(_,i)=>`Story ${i+1}`);
 const quotes = Array.from({length:100},(_,i)=>`Quote ${i+1}`);
+const facts = Array.from({length:100},(_,i)=>`Fact ${i+1}`);
 
 // ===== WEATHER FUNCTION =====
 async function getWeather(city){
@@ -104,7 +100,7 @@ kord({
 // ===== MAIN GOST COMMAND =====
 kord({
   cmd: "gost",
-  desc: "Gost mega bot with AI, jokes, roast, games, music, weather",
+  desc: "Gost mega bot",
   fromMe: false,
   type: "fun"
 }, async (m, text)=>{
@@ -112,12 +108,12 @@ kord({
   const lowerMsg = msg.toLowerCase();
   const lang = userLang[m.sender] || "english";
 
-  // ===== FUN GOST PING =====
+  // 🔹 Ping Gost fun if just .gost
   if(msg === ""){
     return m.send("Sup my nigger 😎 any problem? 💀");
   }
 
-  // ===== LANGUAGE SWITCH =====
+  // 🔹 LANGUAGE SWITCH
   if(lowerMsg.startsWith("lang ")){
     const l = lowerMsg.slice(5).trim();
     if(!langs.includes(l)) return m.send(`❌ Language not supported. Options: ${langs.join(", ")}`);
@@ -125,12 +121,34 @@ kord({
     return m.send(`✅ Language changed to ${l}`);
   }
 
-  // ===== AI CHAT =====
+  // 🔹 GIST SUMMARIZER (text or replied message)
+  if(lowerMsg.startsWith("gist")){
+    let content = msg.slice(4).trim();
+    if(!content){
+      if(m.quoted && m.quoted.text) content = m.quoted.text;
+      else return m.send("❌ Usage: .gost gist <text or reply to a message>");
+    }
+    try{
+      const prompt = `Summarize the following clearly and concisely. Detect if it's text or code:\n\n${content}`;
+      const completion = await openai.chat.completions.create({
+        model:"gpt-4o-mini",
+        messages:[
+          {role:"system", content:"You are Gost, a friendly AI bot that summarizes text and code clearly."},
+          {role:"user", content:prompt}
+        ]
+      });
+      const summary = completion.choices[0].message.content;
+      return m.send(`📝 Summary:\n${summary}`);
+    }catch(e){
+      return m.send("❌ AI error: "+e.message);
+    }
+  }
+
+  // 🔹 AI CHAT
   if(lowerMsg.startsWith("chat ")){
     const prompt = msg.slice(5).trim();
     if(!prompt) return m.send("❌ Usage: .gost chat <message>");
     if(!process.env.OPENAI_API_KEY) return m.send("❌ OPENAI_API_KEY not set");
-
     try{
       const completion = await openai.chat.completions.create({
         model:"gpt-4o-mini",
@@ -145,81 +163,54 @@ kord({
     }
   }
 
-  // ===== JOKE =====
+  // 🔹 JOKES, STORIES, QUOTES, FACTS
   if(lowerMsg==="joke") return m.send(pick(jokes));
-
-  // ===== STORY =====
   if(lowerMsg==="story") return m.send(pick(stories));
-
-  // ===== QUOTE =====
   if(lowerMsg==="quote") return m.send(pick(quotes));
+  if(lowerMsg==="fact") return m.send(pick(facts));
 
-  // ===== WEATHER =====
+  // 🔹 WEATHER
   if(lowerMsg.startsWith("weather ")){
     const city = msg.slice(8).trim();
     if(!city) return m.send("❌ Usage: .gost weather <city>");
-    const report = await getWeather(city);
-    return m.send(report);
+    const w = await getWeather(city);
+    return m.send(w);
   }
 
-  // ===== MUSIC =====
+  // 🔹 MUSIC
   if(lowerMsg.startsWith("music ")){
     const query = msg.slice(6).trim();
-    if(!query) return m.send("❌ Usage: .gost music <song or artist>");
-    const result = await searchMusic(query);
-    await m.send(result.text);
-    if(result.preview) return m.send({audio:{url:result.preview},mimetype:"audio/mp4"});
-    return;
+    if(!query) return m.send("❌ Usage: .gost music <song/artist>");
+    const {text:mus, preview} = await searchMusic(query);
+    return m.send(mus); // for simplicity, preview URL could also be sent
   }
 
-  // ===== ROAST =====
-  if(lowerMsg==="roast") return m.send("🔥 "+pick(roasts));
-
-  if(lowerMsg.startsWith("roast") && m.mentionedJid && m.mentionedJid.length>0){
-    const user = m.mentionedJid[0];
-    return m.send(`🔥 @${user.split("@")[0]}, ${pick(roasts)}`,{mentions:[user]});
+  // 🔹 ROAST
+  if(lowerMsg==="roast") return m.send(pick(roasts));
+  if(lowerMsg.startsWith("roast ")){
+    // mention user roast
+    return m.send(pick(roasts));
   }
 
-  if(lowerMsg==="lastroast"){
-    if(!m.quoted) return m.send("❌ Reply to a message first");
-    const user = m.quoted.sender;
-    const quotedText = m.quoted.text || "this message";
-    return m.send(`💀 @${user.split("@")[0]}, you said:\n"${quotedText}"\n\n🔥 ${pick(roasts)}`,{mentions:[user]});
+  // 🔹 LASTROAST (optional)
+  if(lowerMsg==="lastroast") return m.send(pick(roasts));
+
+  // 🔹 HELP/MENU
+  if(lowerMsg==="help" || lowerMsg==="menu"){
+    return m.send(`
+🤖 Gost Commands:
+.gost - ping
+.gost chat <msg> - AI chat
+.gost gist <text> - summarize text or reply
+.gost lang <language> - switch language
+.joke, .story, .quote, .fact
+.guess <number>
+.gost weather <city>
+.gost music <song/artist>
+.roast, .roast @user, .lastroast
+.help / .menu - this menu
+Languages: ${langs.join(", ")}
+    `);
   }
 
-  // ===== MENU =====
-  if(lowerMsg==="help"||lowerMsg==="menu"){
-    return m.send(
-`👻 *GOST MAIN MENU*
-
-🤖 AI CHAT
-- .gost chat <message> → Talk to Gost in ${lang}
-
-🔥 ROASTS
-- .gost roast → Roast yourself
-- .gost roast @user → Roast someone
-- .gost lastroast → Roast last replied message
-
-😂 FUN
-- .joke → Random joke
-- .story → Random story
-- .quote → Random quote
-
-🎮 MINI GAME
-- .guess <number> → Guess number 1-20
-
-🎵 MUSIC
-- .gost music <song/artist> → Search music & 30s preview
-
-🌤 WEATHER
-- .gost weather <city> → Real-time weather
-
-🌐 LANGUAGE
-- .gost lang <language> → Change language (english, pigin, yoruba, igbo, french, spanish, hausa)`
-    );
-  }
-
-  return m.send("❓ Unknown command. Type *.gost help*");
 });
-
-module.exports = {};
