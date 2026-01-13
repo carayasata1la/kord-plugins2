@@ -2,16 +2,17 @@ const { kord } = require(process.cwd() + "/core");
 const axios = require("axios");
 const OpenAI = require("openai");
 
+// ===== OPENAI v4 CLIENT =====
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
+// ===== HELP FUNCTION =====
 function pick(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-/* ================= ROAST DATA ================= */
-
+// ===== ROAST DATA =====
 const roasts = [
   "💀 Even silence dey make more sense than you.",
   "🔥 Your whole existence be typo.",
@@ -32,12 +33,10 @@ const roasts = [
   "💀 Sense dey missing, reward active.",
   "🔥 Your mouth faster than your brain.",
   "😂 Destiny use incognito for you.",
-  "😈 You be example of how not to.",
-  // Add more as needed
+  "😈 You be example of how not to."
 ];
 
-/* ================= WEATHER FUNCTION ================= */
-
+/* ===== WEATHER FUNCTION ===== */
 async function getWeather(city) {
   try {
     const apiKey = process.env.OPENWEATHER_API_KEY;
@@ -58,8 +57,7 @@ Condition: ${w.weather[0].description}
   }
 }
 
-/* ================= MUSIC FUNCTION ================= */
-
+/* ===== MUSIC FUNCTION ===== */
 async function searchMusic(query) {
   try {
     const url = `https://api.deezer.com/search?q=${encodeURIComponent(query)}`;
@@ -81,8 +79,7 @@ async function searchMusic(query) {
   }
 }
 
-/* ================= GOST COMMAND ================= */
-
+/* ===== GOST COMMAND ===== */
 kord(
   {
     cmd: "gost",
@@ -99,25 +96,23 @@ kord(
       return m.send(
 `👻 *GOST MAIN MENU*
 
-🤖 *AI CHAT*
+🤖 AI CHAT
 - .gost chat <message> → Talk to Gost (English + Pidgin)
 
-🔥 *ROASTS*
+🔥 ROASTS
 - .gost roast → Roast yourself
 - .gost roast @user → Roast someone by mention
 - .gost lastroast → Roast the last message replied to
 
-🎵 *MUSIC*
+🎵 MUSIC
 - .gost music <song/artist> → Search music & preview 30s audio
 
-🌤 *WEATHER*
+🌤 WEATHER
 - .gost weather <city> → Get live weather report
 
-📜 *HELP*
-- .gost help → Show quick help menu
-- .gost menu → Show full menu like this
-
-💀 Fun + Brutal commands all together`
+📜 HELP
+- .gost help → Quick help
+- .gost menu → Full menu with all commands`
       );
     }
 
@@ -142,7 +137,7 @@ kord(
 
 📜 HELP
 .gost help → Show quick help
-.gost menu → Show full menu`
+.gost menu → Full menu with all commands`
       );
     }
 
