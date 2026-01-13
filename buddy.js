@@ -46,12 +46,6 @@ const jokes = [
   "🤣 Why laptop dey cold? Because e get fan inside!",
   "😆 I tell my cat 'You go chop now'… e just look me like say I craze 😹",
   "🤣 Why bank no dey give mosquito loan? Because e no get ID!",
-  "😂 I try dey sleep, bed dey shout 'I dey here oo' 😴",
-  "🤣 Why tomato no dey fight pepper? Because e no wan pepper soup!",
-  "😆 Why snake no dey use phone? Because e dey hiss not text!",
-  "🤣 I ask my fridge why e dey cool… e say 'Na my nature 😎'",
-  "😂 Why fish no dey lie? Because e dey always swim straight!",
-  "🤣 My neighbor dey sing pass microphone 😆",
 ];
 
 // Pidgin motivational quotes
@@ -61,16 +55,6 @@ const quotes = [
   "🌟 Work dey pay for person wey no dey slack.",
   "🧘‍♂️ Take rest, your mind go fresh to perform.",
   "🔥 Believe yourself, nobody fit do your work for you.",
-  "💫 Life na journey, enjoy small small along the way.",
-  "💡 If e fall, pick am, dust am, continue move.",
-  "💪 No dey compare yourself, compare your yesterday self.",
-  "🌟 Good vibes dey attract good things.",
-  "🧘‍♂️ Mind your own waka, e go better.",
-  "🔥 Every wahala get solution, just find am.",
-  "💫 Patience dey always bring reward.",
-  "💡 Success na mixture of small effort daily.",
-  "💪 Stress dey teach, no gree give up.",
-  "🌟 Smile small, e dey lighten body & mind.",
 ];
 
 // Riddles
@@ -87,7 +71,7 @@ const stories = [
   "Ahhh, one lady teach me say small small savings dey grow like tree 🌳…",
 ];
 
-// Live chat mode default
+// Chat mode default
 const chatModeDefault = true;
 
 // Typing simulation
@@ -163,59 +147,74 @@ kord(
 
     rememberMessage(user, msg);
 
-    // ------------------- COMMANDS -------------------
-
+    // ------------------- HELP -------------------
     if (msg === "help") {
       return typingSend(m, `📜 Buddy Pro Max Ultimate Commands:
-1️⃣ .buddy name <name>
-2️⃣ .buddy favorite <thing>
-3️⃣ .buddy hobby <thing>
-4️⃣ .buddy info
-5️⃣ .buddy mood <happy/sad/angry> / .buddy mood
-6️⃣ .buddy remind <10s/5m> <task>
-7️⃣ .buddy reminders
-8️⃣ .buddy delreminder <number>
-9️⃣ .buddy joke
-🔟 .buddy advice
-1️⃣1️⃣ .buddy rps <rock/paper/scissors>
-1️⃣2️⃣ .buddy coin
-1️⃣3️⃣ .buddy guess <1-20>
-1️⃣4️⃣ .buddy trivia
-1️⃣5️⃣ .buddy answer <text>
-1️⃣6️⃣ .buddy stats
-1️⃣7️⃣ .buddy features
-1️⃣8️⃣ .buddy translate <text>
-1️⃣9️⃣ .buddy weather <city>
-2️⃣0️⃣ .buddy insult <name>
-2️⃣1️⃣ .buddy compliment <name>
-2️⃣2️⃣ .buddy riddle
-2️⃣3️⃣ .buddy story
-2️⃣4️⃣ .buddy daily
-2️⃣5️⃣ .buddy chatmode <on/off>
-2️⃣6️⃣ .buddy roll <dice>
-2️⃣7️⃣ .buddy math <expression>
-2️⃣8️⃣ .buddy moodcheck
-2️⃣9️⃣ .buddy facts
-3️⃣0️⃣ .buddy storytime`);
+
+👤 Personal Info:
+1️⃣ .buddy name <name> - Set your name
+2️⃣ .buddy favorite <thing> - Set your favorite thing
+3️⃣ .buddy hobby <thing> - Add hobby
+4️⃣ .buddy info - Show your info
+5️⃣ .buddy mood <happy/sad/angry> / .buddy mood - Set or view mood
+
+⏰ Reminders:
+6️⃣ .buddy remind <10s/5m> <task> - Set reminder
+7️⃣ .buddy reminders - View active reminders
+8️⃣ .buddy delreminder <number> - Delete reminder
+
+😂 Fun & Chat:
+9️⃣ .buddy joke - Random Pidgin joke
+🔟 .buddy advice - Random Pidgin quote / advice
+1️⃣1️⃣ .buddy riddle - Get a random riddle
+1️⃣2️⃣ .buddy story - Get a short story
+1️⃣3️⃣ .buddy daily - Collect daily XP / bonus
+1️⃣4️⃣ .buddy translate <text> - Translate text (fun mode)
+1️⃣5️⃣ .buddy weather <city> - Fake weather info
+1️⃣6️⃣ .buddy insult <name> - Random funny insult
+1️⃣7️⃣ .buddy compliment <name> - Random compliment
+1️⃣8️⃣ .buddy chatmode <on/off> - Turn live chat on/off
+
+🎲 Mini-Games:
+1️⃣9️⃣ .buddy rps <rock/paper/scissors> - Play Rock Paper Scissors
+2️⃣0️⃣ .buddy coin - Flip a coin
+2️⃣1️⃣ .buddy guess <1-20> - Guess the number game
+2️⃣2️⃣ .buddy trivia - Start trivia
+2️⃣3️⃣ .buddy answer <text> - Answer trivia / riddle
+2️⃣4️⃣ .buddy roll - Roll dice
+2️⃣5️⃣ .buddy math <expression> - Calculate math
+
+🔎 Extras:
+2️⃣6️⃣ .buddy moodcheck - Suggest activity based on mood
+2️⃣7️⃣ .buddy facts - Random fun fact
+2️⃣8️⃣ .buddy storytime - Interactive choose-your-adventure story
+
+📊 Stats & Features:
+2️⃣9️⃣ .buddy stats - View XP, level, mood, hobbies
+3️⃣0️⃣ .buddy features - View Buddy Pro Max features list
+`);
     }
 
     // ------------------- PERSONAL INFO -------------------
     if (msg.startsWith("name ")) {
       user.name = text.slice(5).trim();
       saveMemory();
-      return typingSend(m, `✅ Omo, I go dey call you ${user.name} from now`);
+      return typingSend(m, `✅ I go dey call you ${user.name} from now`);
     }
+
     if (msg.startsWith("favorite ")) {
       user.favorite = text.slice(9).trim();
       saveMemory();
       return typingSend(m, `🎉 I don remember say your favorite na ${user.favorite}`);
     }
+
     if (msg.startsWith("hobby ")) {
       const hobby = text.slice(6).trim();
       user.hobbies.push(hobby);
       saveMemory();
       return typingSend(m, `✅ I don add hobby: ${hobby}`);
     }
+
     if (msg === "info") {
       return typingSend(m, `📋 Your info:
 Name: ${user.name || "N/A"}
@@ -232,6 +231,7 @@ XP: ${user.xp}`);
       saveMemory();
       return typingSend(m, `🙂 I don set your mood to "${user.mood}"`);
     }
+
     if (msg === "mood") return typingSend(m, `🙂 Your last mood na "${user.mood}"`);
 
     // ------------------- REMINDERS -------------------
@@ -253,6 +253,7 @@ XP: ${user.xp}`);
       }, delayTime);
       return typingSend(m, `⏳ Reminder don set: "${task}" for ${parts[0]}`);
     }
+
     if (msg === "reminders") {
       if (!user.reminders.length) return typingSend(m, "📭 You no get active reminder");
       let list = "⏳ Your reminders:\n";
@@ -262,6 +263,7 @@ XP: ${user.xp}`);
       });
       return typingSend(m, list);
     }
+
     if (msg.startsWith("delreminder ")) {
       const num = parseInt(msg.split(" ")[1]);
       if (isNaN(num) || num < 1 || num > user.reminders.length)
@@ -314,16 +316,20 @@ XP: ${user.xp}`);
       saveMemory();
       return typingSend(m, `❓ Trivia: ${q.q} (reply with .buddy answer <your answer>)`);
     }
+
     if (msg.startsWith("answer ")) {
       const answer = text.slice(7).trim().toLowerCase();
-      if (!user.game.triviaAnswer) return typingSend(m, "❌ No active trivia question");
-      if (answer === user.game.triviaAnswer) {
+      if (!user.game.triviaAnswer && !user.game.riddleAnswer)
+        return typingSend(m, "❌ No active trivia or riddle question");
+      if (answer === (user.game.triviaAnswer || user.game.riddleAnswer)) {
         user.xp += 20;
         user.game.triviaAnswer = null;
+        user.game.riddleAnswer = null;
         saveMemory();
         return typingSend(m, "🎉 Correct! You earn 20 XP 😎");
       } else {
         user.game.triviaAnswer = null;
+        user.game.riddleAnswer = null;
         saveMemory();
         return typingSend(m, "❌ Wrong oh! Better luck next time");
       }
@@ -354,22 +360,19 @@ Favorite: ${user.favorite || "N/A"}`);
       return typingSend(m, featureList);
     }
 
-    // ------------------- TRANSLATE -------------------
+    // ------------------- NEW COMMANDS -------------------
     if (msg.startsWith("translate ")) {
       const txt = text.slice(10).trim();
       if (!txt) return typingSend(m, "❌ Usage: `.buddy translate Hello, how are you?`");
-      // Simple fake translation
       return typingSend(m, `🌐 Translation: ${txt.split(" ").map(w => w+"o").join(" ")}`);
     }
 
-    // ------------------- WEATHER -------------------
     if (msg.startsWith("weather ")) {
       const city = text.slice(8).trim();
       if (!city) return typingSend(m, "❌ Usage: `.buddy weather Lagos`");
       return typingSend(m, fakeWeather(city));
     }
 
-    // ------------------- INSULT & COMPLIMENT -------------------
     if (msg.startsWith("insult ")) {
       const name = text.slice(7).trim();
       if (!name) return typingSend(m, "❌ Usage: `.buddy insult Peter`");
@@ -392,7 +395,6 @@ Favorite: ${user.favorite || "N/A"}`);
       return typingSend(m, randomItem(compliments));
     }
 
-    // ------------------- RIDDLE & STORY -------------------
     if (msg === "riddle") {
       const r = randomItem(riddles);
       user.game.riddleAnswer = r.a;
@@ -402,14 +404,12 @@ Favorite: ${user.favorite || "N/A"}`);
 
     if (msg === "story") return typingSend(m, randomItem(stories));
 
-    // ------------------- DAILY -------------------
     if (msg === "daily") {
       user.xp += 50;
       saveMemory();
       return typingSend(m, "🎁 You don collect daily 50 XP! 😎");
     }
 
-    // ------------------- CHATMODE -------------------
     if (msg.startsWith("chatmode ")) {
       const mode = text.slice(9).trim();
       if (!["on","off"].includes(mode)) return typingSend(m, "❌ Usage: `.buddy chatmode on/off`");
@@ -418,5 +418,15 @@ Favorite: ${user.favorite || "N/A"}`);
       return typingSend(m, `✅ Chat mode set to ${mode}`);
     }
 
-    // ------------------- ROLL & MATH -------------------
-    if (msg === "roll" || msg
+    if (msg === "roll") return typingSend(m, `🎲 You roll: ${rollDice()}`);
+
+    if (msg.startsWith("math ")) {
+      const expr = text.slice(5).trim();
+      if (!expr) return typingSend(m, "❌ Usage: `.buddy math 2+2`");
+      const res = safeEval(expr);
+      if (res === null) return typingSend(m, "❌ Invalid math expression");
+      return typingSend(m, `🧮 Result: ${res}`);
+    }
+
+    if (msg === "moodcheck") {
+      const suggestions = {
