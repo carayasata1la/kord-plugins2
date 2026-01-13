@@ -8,7 +8,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 // Random pick function
 function pick(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
 
-// Sample jokes, stories, quotes, facts (add more as needed)
+// Sample jokes, stories, quotes, facts (expand as needed)
 const jokes = [
   "Why did the chicken cross the road? To get to the other side!",
   "I told my computer I needed a break, and it said 'No problem — I'll go to sleep!'",
@@ -33,9 +33,6 @@ const roasts = [
 
 // Language for chat
 const userLang = {}; // { userID: "english" }
-
-// Mini-game scores
-const gameScores = {}; // { userID: score }
 
 kord({
   cmd: "gost",
@@ -98,16 +95,6 @@ kord({
   if(lowerMsg === "story") return m.send(pick(stories));
   if(lowerMsg === "quote") return m.send(pick(quotes));
   if(lowerMsg === "fact") return m.send(pick(facts));
-
-  // ===== MINI GAME =====
-  if(lowerMsg.startsWith("guess ")){
-    const guess = parseInt(msg.slice(6).trim());
-    if(isNaN(guess) || guess<1 || guess>20) return m.send("❌ Number must be 1-20");
-    const number = Math.floor(Math.random()*20)+1;
-    if(guess === number) return m.send(`🎉 Correct! The number was ${number}`);
-    else if(guess < number) return m.send("📈 Too low! Try again");
-    else return m.send("📉 Too high! Try again");
-  }
 
   // ===== MUSIC SEARCH (Preview URL) =====
   if(lowerMsg.startsWith("music ")){
@@ -176,9 +163,6 @@ kord({
 - .story → Random story
 - .quote → Random quote
 - .fact → Random fact
-
-🎮 MINI GAME
-- .guess <number> → Guess number 1-20
 
 🎵 MUSIC
 - .gost music <song/artist> → Search music & 30s preview
