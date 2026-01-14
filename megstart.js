@@ -1,156 +1,190 @@
-const { Kord } = require("kord"); // Make sure Kord is installed
-const bot = new Kord("YOUR_BOT_TOKEN"); // Replace with your bot token
+let game = null
 
-const prefix = ".";
-
-// ---------- GAME STATE ----------
-let currentGame = null;
-
-function createGame(channelId) {
-    return {
-        channel: channelId,
-        players: [],
-        currentTurn: 0,
-        questions: [],
-        timer: null,
-        started: false
-    };
-}
-
-// ---------- QUESTION BANK ----------
-// 100 hard line-picture questions
 const questionsBank = [
-    // Example questions — full 100 to be added here
-    {
-        pic: `
+  {
+    pic: `
    __
   |  |
   |__|`,
-        options: ['Square', 'Triangle', 'Rectangle', 'Circle'],
-        answer: 'Square'
-    },
-    {
-        pic: `
-   /\\
-  /  \\
- /____\\`,
-        options: ['Triangle', 'Arrow', 'Mountain', 'Roof'],
-        answer: 'Triangle'
-    },
-    {
-        pic: `
+    options: ["Square", "Rectangle", "Box", "Window"],
+    answer: "A"
+  },
+  {
+    pic: `
+    /\\
+   /  \\
+  /____\\`,
+    options: ["Roof", "Triangle", "Arrow", "Mountain"],
+    answer: "B"
+  },
+  {
+    pic: `
    /\\_/\\
   ( o.o )
    > ^ <`,
-        options: ['Dog', 'Cat', 'Rabbit', 'Mouse'],
-        answer: 'Cat'
-    },
-    // … add remaining 97 questions here in same format
-];
+    options: ["Dog", "Cat", "Fox", "Rabbit"],
+    answer: "B"
+  },
+  {
+    pic: `
+   ____
+  |____|
+     ||
+     ||`,
+    options: ["Chair", "Table", "Hammer", "Key"],
+    answer: "C"
+  },
+  {
+    pic: `
+    __
+   |__|
+   |__|
+   |__|`,
+    options: ["Drawer", "Tower", "Books", "Stairs"],
+    answer: "D"
+  }
+]
 
-// ---------- UTILS ----------
-function shuffleArray(arr) {
-    return arr.sort(() => Math.random() - 0.5);
+// shuffle questions
+function shuffle(arr) {
+  return arr.sort(() => Math.random() - 0.5)
 }
 
-// ---------- GAME FUNCTIONS ----------
-async function nextTurn() {
-    const alivePlayers = currentGame.players.filter(p => p.alive);
-    if (alivePlayers.length <= 1) return announceWinner();
+async function nextTurn(sock) {
+  if (!game) return
 
-    currentGame.currentTurn = (currentGame.currentTurn + 1) % currentGame.players.length;
-    let player = currentGame.players[currentGame.currentTurn];
-    if (!player.alive) return nextTurn();
+  if (game.players.length === 1) {
+    await sock.sendMessage(game.group, {
+      text: `🏆 *GAME OVER*\nWinner: @${game.players[0].split("@")[0]}`,
+      mentions: game.players
+    })
+    game = null
+    return
+  }
 
-    if (currentGame.questions.length === 0) currentGame.questions = shuffleArray([...questionsBank]);
-    const q = currentGame.questions.shift();
-    const optionsText = ['A','B','C','D'].map((o,i)=>`${o}) ${q.options[i]}`).join('\n');
+  game.turn = game.turn % game.players.length
+  const player = game.players[game.turn]
+  const q = game.questions.pop()
 
-    await bot.sendMessage(currentGame.channel,
-        `🎮 ${player.name}'s turn!\nGuess the object:\n${q.pic}\n${optionsText}\n\nType: .answer <A/B/C/D>\nYou have 30 seconds!`
-    );
+  game.currentAnswer = q.answer
+  game.currentPlayer = player
 
-    // Start turn timer
-    currentGame.timer = setTimeout(async () => {
-        await bot.sendMessage(currentGame.channel, `⏱ Time's up! ${player.name} did not answer and is eliminated.`);
-        player.alive = false;
-        checkGameOver();
-    }, 30000);
+  await sock.sendMessage(game.group, {
+    text:
+`🎯 *YOUR TURN*
+@${player.split("@")[0]}
+
+Guess the picture:
+
+${q.pic}
+
+A) ${q.options[0]}
+B) ${q.options[1]}
+C) ${q.options[2]}
+D) ${q.options[3]}
+
+Reply with:
+.answer A/B/C/D
+
+⏱ 30 seconds`,
+    mentions: [player]
+  })
+
+  game.timer = setTimeout(async () => {
+    await sock.sendMessage(game.group, {
+      text: `⏱ TIME UP!\n@${player.split("@")[0]} is OUT ❌`,
+      mentions: [player]
+    })
+    game.players.splice(game.turn, 1)
+    await nextTurn(sock)
+  }, 30000)
 }
 
-function checkGameOver() {
-    const alivePlayers = currentGame.players.filter(p => p.alive);
-    if (alivePlayers.length <= 1) return announceWinner();
-    nextTurn();
-}
+module.exports = {
+  name: "meg",
+  commands: ["megstart", "join", "answer"],
 
-async function announceWinner() {
-    const winner = currentGame.players.find(p => p.alive);
-    if (winner) await bot.sendMessage(currentGame.channel, `🏆 Congrats ${winner.name}! You won the 3 Player Line-Picture Quiz!`);
-    else await bot.sendMessage(currentGame.channel, 'No winners this time! All players eliminated.');
-    currentGame = null;
-}
+  handler: async (m, { sock, command, args }) => {
+    const from = m.key.remoteJid
+    const sender = m.key.participant || m.key.remoteJid
 
-// ---------- EVENT HANDLER ----------
-bot.on("messageCreate", async (message) => {
-    if (message.author.bot) return;
-    if (!message.content.startsWith(prefix)) return;
+    if (!from.endsWith("@g.us")) {
+      return sock.sendMessage(from, { text: "❌ Group only game." })
+    }
 
-    const args = message.content.slice(prefix.length).trim().split(/ +/);
-    const command = args.shift().toLowerCase();
-    const channelId = message.channel.id;
-    const senderId = message.author.id;
-
-    // Start game
+    // START
     if (command === "megstart") {
-        if (currentGame && currentGame.started) return message.reply("A game is already running!");
-        currentGame = createGame(channelId);
-        message.reply("🎮 3 Player Guess Game Started! Players type `.join`. Game auto-cancels in 1 minute if not enough players.");
+      if (game) {
+        return sock.sendMessage(from, { text: "⚠️ A game is already running." })
+      }
 
-        setTimeout(() => {
-            if (!currentGame.started) {
-                bot.sendMessage(channelId, "⏱ Game cancelled! Not enough players joined.");
-                currentGame = null;
-            }
-        }, 60000);
-    }
+      game = {
+        group: from,
+        players: [],
+        started: false,
+        turn: 0,
+        questions: shuffle([...questionsBank])
+      }
 
-    // Player joins
-    else if (command === "join") {
-        if (!currentGame || currentGame.started) return;
-        if (currentGame.players.find(p => p.id === senderId)) return message.reply("You already joined!");
+      await sock.sendMessage(from, {
+        text:
+`🎮 *LINE PICTURE GUESS GAME*
+Need 3 players
 
-        currentGame.players.push({ id: senderId, name: message.author.username, alive: true });
-        message.reply(`${message.author.username} joined the game! (${currentGame.players.length}/3)`);
+Type:
+.join
 
-        if (currentGame.players.length === 3) {
-            currentGame.started = true;
-            currentGame.questions = shuffleArray([...questionsBank]);
-            message.reply("✅ All 3 players joined! Game starting...");
-            nextTurn();
+⏱ Auto-cancel in 1 minute`
+      })
+
+      setTimeout(() => {
+        if (game && !game.started) {
+          sock.sendMessage(from, { text: "⏱ Game cancelled (not enough players)." })
+          game = null
         }
+      }, 60000)
     }
 
-    // Player answers
-    else if (command === "answer") {
-        if (!currentGame || !currentGame.started) return;
-        const currentPlayer = currentGame.players[currentGame.currentTurn];
-        if (senderId !== currentPlayer.id) return message.reply("⚠️ It's not your turn!");
+    // JOIN
+    if (command === "join") {
+      if (!game || game.started) return
 
-        const answer = args[0]?.trim();
-        if (!answer) return message.reply("Please provide your answer after `.answer` (e.g., `.answer A`)");
+      if (game.players.includes(sender)) {
+        return sock.sendMessage(from, { text: "⚠️ You already joined." })
+      }
 
-        clearTimeout(currentGame.timer);
+      game.players.push(sender)
 
-        const q = currentGame.questions.shift();
-        const correctOption = q.answer;
-        if (answer.toLowerCase() === correctOption[0].toLowerCase() || answer.toLowerCase() === correctOption.toLowerCase()) {
-            message.reply(`✅ Correct! ${currentPlayer.name} survives.`);
-            nextTurn();
-        } else {
-            message.reply(`❌ Wrong! ${currentPlayer.name} is eliminated.`);
-            currentPlayer.alive = false;
-            checkGameOver();
-        }
+      await sock.sendMessage(from, {
+        text: `✅ Joined (${game.players.length}/3)`
+      })
+
+      if (game.players.length === 3) {
+        game.started = true
+        await sock.sendMessage(from, { text: "🔥 Game starting!" })
+        await nextTurn(sock)
+      }
     }
-});
+
+    // ANSWER
+    if (command === "answer") {
+      if (!game || !game.started) return
+      if (sender !== game.currentPlayer) return
+
+      const userAns = args[0]?.toUpperCase()
+      clearTimeout(game.timer)
+
+      if (userAns === game.currentAnswer) {
+        await sock.sendMessage(from, { text: "✅ Correct!" })
+        game.turn++
+      } else {
+        await sock.sendMessage(from, {
+          text: `❌ Wrong! Correct answer was ${game.currentAnswer}\nYou are OUT`
+        })
+        game.players.splice(game.turn, 1)
+      }
+
+      await nextTurn(sock)
+    }
+  }
+}
