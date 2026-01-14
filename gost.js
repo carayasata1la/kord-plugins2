@@ -1,3 +1,19 @@
+/* [GOST AI v2 — PART 1 / 3]
+ * Premium Assistant + Session Auto Reply (TAG / ALL)
+ * Commands:
+ *  - gost menu | help | setup
+ *  - gost on | off | status
+ *  - gost mode tag | mode all
+ *  - gost chat <msg> | coach <msg> | writer <msg> | coder <msg> | translate <text>
+ *  - gost summarize (reply)
+ *  - gost roast | roast @user | lastroast (reply) | roastlevel <soft|medium|savage>
+ *  - gost weather <city> | setcity <city>
+ *  - gost music <query>
+ *  - gost mem | memclear
+ *
+ * Deps: axios, openai, canvas (optional)
+ */
+
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
@@ -53,9 +69,7 @@ function isAllowed(m) {
   const sudoRaw = cfg?.SUDO || cfg?.SUDO_USERS || cfg?.SUDOS;
   const sender = getSenderId(m);
   if (sudoRaw && sender) {
-    const list = Array.isArray(sudoRaw)
-      ? sudoRaw
-      : String(sudoRaw).split(",").map(x => x.trim()).filter(Boolean);
+    const list = Array.isArray(sudoRaw) ? sudoRaw : String(sudoRaw).split(",").map(x=>x.trim()).filter(Boolean);
     if (list.includes(sender)) return true;
   }
   return false;
@@ -76,27 +90,23 @@ async function sendText(m, txt, opt = {}) {
   try { if (typeof m.send === "function") return await m.send(txt, opt); } catch {}
   try {
     if (m?.client?.sendMessage) {
-      return await m.client.sendMessage(getChatId(m), { text: String(txt || ""), ...opt }, { quoted: m });
+      return await m.client.sendMessage(getChatId(m), { text: txt, ...opt }, { quoted: m });
     }
   } catch {}
-  try { if (typeof m.reply === "function") return await m.reply(String(txt || "")); } catch {}
+  try { if (typeof m.reply === "function") return await m.reply(txt); } catch {}
   return null;
 }
-async function sendImage(m, buf, caption = "") {
+async function sendImage(m, buf, caption = "", opt = {}) {
   try { if (typeof m.replyimg === "function") return await m.replyimg(buf, caption); } catch {}
   try {
     if (m?.client?.sendMessage) {
-      return await m.client.sendMessage(getChatId(m), { image: buf, caption: caption || "" }, { quoted: m });
+      return await m.client.sendMessage(getChatId(m), { image: buf, caption, ...opt }, { quoted: m });
     }
   } catch {}
-  return sendText(m, caption || "✅");
+  return sendText(m, caption || "✅", opt);
 }
 function withMentions(text, jids) {
   return { text, mentions: Array.isArray(jids) ? jids : [] };
-}
-function short(s, n = 700) {
-  s = String(s || "");
-  return s.length > n ? s.slice(0, n) + "…" : s;
 }
 
 /* ----------------- STORAGE ----------------- */
@@ -118,11 +128,9 @@ function writeJSON(file, obj) {
   ensureDirs();
   fs.writeFileSync(file, JSON.stringify(obj, null, 2), "utf8");
 }
+function ukey(m) { return `${getChatId(m)}::${getSenderId(m)}`; }
+function chatKey(m) { return `${getChatId(m)}`; }
 
-/* ----------------- USER PREFS (per chat+sender) ----------------- */
-function ukey(m) {
-  return `${getChatId(m)}::${getSenderId(m)}`;
-}
 function getPrefs(m) {
   const db = readJSON(PREF_FILE, { users: {}, chats: {} });
   return db.users[ukey(m)] || {};
@@ -134,39 +142,18 @@ function setPrefs(m, patch) {
   writeJSON(PREF_FILE, db);
   return db.users[k];
 }
-
-/* ----------------- CHAT SESSION (FIX: per chat, not per user) ----------------- */
-function chatKey(m) {
-  return String(getChatId(m) || "unknown");
-}
-function getChatSession(m) {
+function getChatPrefs(m) {
   const db = readJSON(PREF_FILE, { users: {}, chats: {} });
-  db.chats = db.chats || {};
   return db.chats[chatKey(m)] || {};
 }
-function setChatSession(m, patch) {
+function setChatPrefs(m, patch) {
   const db = readJSON(PREF_FILE, { users: {}, chats: {} });
-  db.chats = db.chats || {};
   const k = chatKey(m);
-  db.chats[k] = { ...(db.chats[k] || {}), ...patch, updatedAt: Date.now() };
+  db.chats[k] = { ...(db.chats[k] || {}), ...patch };
   writeJSON(PREF_FILE, db);
   return db.chats[k];
 }
 
-/* ----------------- OPENAI CLIENT ----------------- */
-const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || "").trim();
-const MODEL = (process.env.GOST_MODEL || "gpt-4o-mini").trim();
-const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
-
-module.exports = {
-  fs, path, https, http, axios, Canvas, kord, wtype,
-  SAFE_PREFIX, getVar, getSenderId, getChatId, isAllowed, getTextFromAny,
-  sendText, sendImage, withMentions, short,
-  DATA_DIR, MEM_FILE, PREF_FILE, readJSON, writeJSON,
-  ukey, getPrefs, setPrefs,
-  chatKey, getChatSession, setChatSession,
-  openai, MODEL
-};
 /* ----------------- MEMORY (rolling) ----------------- */
 function memCap() {
   const v = parseInt(getVar("GOST_MEM", "24"), 10);
@@ -197,20 +184,16 @@ function clearMem(m) {
 /* ----------------- COOLDOWN ----------------- */
 const COOLDOWN = new Map();
 function cdSec() {
-  const v = parseInt(getVar("GOST_COOLDOWN", "5"), 10);
-  return Math.max(0, Math.min(30, Number.isFinite(v) ? v : 5));
+  const v = parseInt(getVar("GOST_COOLDOWN", "3"), 10);
+  return Math.max(0, Math.min(30, Number.isFinite(v) ? v : 3));
 }
-function checkCooldown(m) {
+function checkCooldownKey(key) {
   const s = cdSec();
   if (!s) return null;
-  const k = ukey(m);
   const now = Date.now();
-  const last = COOLDOWN.get(k) || 0;
-  if (now - last < s * 1000) {
-    const left = Math.ceil((s * 1000 - (now - last)) / 1000);
-    return left;
-  }
-  COOLDOWN.set(k, now);
+  const last = COOLDOWN.get(key) || 0;
+  if (now - last < s * 1000) return Math.ceil((s * 1000 - (now - last)) / 1000);
+  COOLDOWN.set(key, now);
   return null;
 }
 
@@ -218,6 +201,51 @@ function checkCooldown(m) {
 const OPENAI_API_KEY = (process.env.OPENAI_API_KEY || "").trim();
 const MODEL = (process.env.GOST_MODEL || "gpt-4o-mini").trim();
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
+
+/* ----------------- SESSION + MODE ----------------- */
+function sessionState(m) {
+  const c = getChatPrefs(m);
+  return { on: !!c.session_on, mode: (c.session_mode || "tag").toLowerCase() }; // tag | all
+}
+function setSession(m, on) { return setChatPrefs(m, { session_on: !!on }); }
+function setMode(m, mode) {
+  mode = String(mode || "").toLowerCase();
+  if (!["tag", "all"].includes(mode)) return null;
+  setChatPrefs(m, { session_mode: mode });
+  return mode;
+}
+
+function getBotJid(m) {
+  const a = m?.client?.user?.id || m?.client?.user?.jid || m?.user?.id || "";
+  if (a && typeof a === "string") return a.includes("@") ? a : `${a}@s.whatsapp.net`;
+  const cfg = getCfgAny();
+  const bn = cfg?.BOT_NUMBER || cfg?.BOTNUM || cfg?.NUMBER;
+  if (bn) return `${String(bn).replace(/\D/g, "")}@s.whatsapp.net`;
+  return "";
+}
+function getOwnerJidGuess() {
+  const cfg = getCfgAny();
+  const n = cfg?.OWNER_NUMBER || cfg?.OWNER || cfg?.OWNERNUM || "";
+  const digits = String(n || "").replace(/\D/g, "");
+  return digits ? `${digits}@s.whatsapp.net` : "";
+}
+function isTaggedForSession(m) {
+  const mentioned = Array.isArray(m?.mentionedJid) ? m.mentionedJid : [];
+  if (!mentioned.length) return false;
+
+  const bot = getBotJid(m);
+  const owner = getOwnerJidGuess();
+
+  if (bot && mentioned.includes(bot)) return true;
+  if (owner && mentioned.includes(owner)) return true;
+
+  const botNum = bot ? bot.split("@")[0] : "";
+  const ownerNum = owner ? owner.split("@")[0] : "";
+  return mentioned.some(j => {
+    const num = String(j).split("@")[0];
+    return (botNum && num === botNum) || (ownerNum && num === ownerNum);
+  });
+}
 
 /* ----------------- CANVAS MENU ----------------- */
 const THEMES = {
@@ -230,14 +258,25 @@ function themeNow() {
   const t = (process.env.GOST_THEME || "neon").trim().toLowerCase();
   return THEMES[t] || THEMES.neon;
 }
-function bgUrl() {
-  return (process.env.GOST_MENU_BG || "").trim();
+function bgUrl() { return (process.env.GOST_MENU_BG || "").trim(); }
+
+function fetchBuffer(url) {
+  return new Promise((resolve, reject) => {
+    const lib = url.startsWith("https") ? https : http;
+    lib.get(url, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return resolve(fetchBuffer(res.headers.location));
+      }
+      if (res.statusCode !== 200) { res.resume(); return reject(new Error("HTTP " + res.statusCode)); }
+      const chunks = [];
+      res.on("data", (d) => chunks.push(d));
+      res.on("end", () => resolve(Buffer.concat(chunks)));
+    }).on("error", reject);
+  });
 }
 
-/* ----------------- MENU IMAGE ----------------- */
 async function makeMenuCard(title, lines, size = 900) {
   if (!Canvas) return null;
-
   const { createCanvas, loadImage } = Canvas;
   const theme = themeNow();
 
@@ -258,12 +297,8 @@ async function makeMenuCard(title, lines, size = 900) {
       const scale = Math.max(w / img.width, h / img.height);
       const iw = img.width * scale, ih = img.height * scale;
       ctx.drawImage(img, (w - iw) / 2, (h - ih) / 2, iw, ih);
-    } catch {
-      ctx.fillStyle = "#06130d"; ctx.fillRect(0, 0, w, h);
-    }
-  } else {
-    ctx.fillStyle = "#06130d"; ctx.fillRect(0, 0, w, h);
-  }
+    } catch { ctx.fillStyle = "#06130d"; ctx.fillRect(0, 0, w, h); }
+  } else { ctx.fillStyle = "#06130d"; ctx.fillRect(0, 0, w, h); }
 
   ctx.fillStyle = "rgba(0,0,0,0.48)"; ctx.fillRect(0, 0, w, h);
   ctx.strokeStyle = theme.border; ctx.lineWidth = 3;
@@ -285,55 +320,58 @@ async function makeMenuCard(title, lines, size = 900) {
   ctx.fillStyle = theme.dim;
 
   let y = pad + titleH + Math.round(size * 0.055);
-  for (const ln of lines) {
-    ctx.fillText(String(ln), pad, y);
-    y += lineH;
-  }
+  for (const ln of lines) { ctx.fillText(String(ln), pad, y); y += lineH; }
 
   ctx.font = `${Math.round(size * 0.028)}px Sans`;
   ctx.fillStyle = theme.neon;
-  ctx.fillText("GOST AI • PREMIUM", pad, h - pad);
+  ctx.fillText("GOST AI • SESSION MODE", pad, h - pad);
 
   return canvas.toBuffer("image/png");
 }
+/* [PART 1 END] */
+/* [GOST AI v2 — PART 2 / 3] */
 
 /* ----------------- AI CORE ----------------- */
 function baseSystem(mode) {
   const modeHint = {
-    chat: "Be friendly, sharp, Nigerian-street-smart but respectful. Mostly English with small Pidgin when it fits.",
-    coach: "Be practical. Give steps, checklists, plans.",
-    writer: "Write premium content. Provide 3 options + best pick.",
-    coder: "Explain simply. Give clean code ready for KORD plugins.",
-    translate: "Translate cleanly and preserve tone.",
-    summarize: "Summarize into bullets + actions.",
-    roast: "Playful banter only. No slurs, hate, threats, or family curses."
+    chat: "Be friendly, sharp, Nigerian-street-smart but respectful. English + small Pidgin mix when it fits.",
+    coach: "Be a practical coach. Give steps, plans, checklists.",
+    writer: "Write premium content: captions, bios, scripts, hooks. Give 3 options + best pick.",
+    coder: "Debug + explain simply. Give clean code and how to paste it into KORD plugins.",
+    translate: "Translate cleanly. Keep meaning + tone. If Pidgin requested, do Naija Pidgin well.",
+    summarize: "Summarize clearly into bullets, actions, and key points.",
+    roast: "Generate playful banter only. No slurs, no hate, no threats, no family curses. Keep it witty.",
+    auto: "You are replying in a WhatsApp group. Keep it short, helpful, and natural. Avoid long essays."
   }[mode] || "Be helpful.";
 
   return (
     "You are GOST AI, a premium WhatsApp assistant.\n" +
     "Rules:\n" +
-    "- Be concise and premium.\n" +
-    "- Never output hate, slurs, threats, doxxing.\n" +
+    "- Keep responses concise but premium.\n" +
+    "- Never output hate, slurs, threats, doxxing, or sexual content.\n" +
+    "- If asked for harmful content, refuse and redirect.\n" +
     "Mode:\n" + modeHint
   );
 }
 
 async function aiReply(m, userText, mode = "chat") {
   if (!openai) throw new Error("OPENAI_API_KEY not set.");
-  const left = checkCooldown(m);
+
+  const cdKey = "chat::" + getChatId(m);
+  const left = checkCooldownKey(cdKey);
   if (left) throw new Error(`Cooldown: wait ${left}s`);
 
   const history = loadMem(m).map(x => ({ role: x.role, content: x.content }));
   const messages = [
     { role: "system", content: baseSystem(mode) },
     ...history.slice(-memCap()),
-    { role: "user", content: String(userText || "").slice(0, 8000) }
+    { role: "user", content: userText }
   ];
 
   const resp = await openai.chat.completions.create({
     model: MODEL,
     messages,
-    temperature: mode === "roast" ? 0.95 : 0.7,
+    temperature: (mode === "roast") ? 0.95 : 0.7,
   });
 
   const out = resp?.choices?.[0]?.message?.content?.trim();
@@ -376,12 +414,17 @@ async function searchMusic(query) {
   };
 }
 
-/* ----------------- MENU LINES ----------------- */
-function menuLines() {
+/* ----------------- MENU ----------------- */
+function menuLines(m) {
   const p = SAFE_PREFIX();
+  const st = sessionState(m);
   return [
-    `${p}gost menu`,
-    `${p}gost setup`,
+    `SESSION: ${st.on ? "ON" : "OFF"} • MODE: ${st.mode.toUpperCase()}`,
+    `${p}gost on`,
+    `${p}gost off`,
+    `${p}gost mode tag`,
+    `${p}gost mode all`,
+    `${p}gost status`,
     "",
     "AI MODES",
     `${p}gost chat <msg>`,
@@ -389,12 +432,12 @@ function menuLines() {
     `${p}gost writer <msg>`,
     `${p}gost coder <msg>`,
     `${p}gost translate <text>`,
-    `${p}gost summarize (reply)`,
+    `${p}gost summarize   (reply)`,
     "",
     "FUN",
     `${p}gost roast`,
     `${p}gost roast @user`,
-    `${p}gost lastroast (reply)`,
+    `${p}gost lastroast   (reply)`,
     `${p}gost roastlevel <soft|medium|savage>`,
     "",
     "UTILS",
@@ -404,78 +447,52 @@ function menuLines() {
     "",
     "MEMORY",
     `${p}gost mem`,
-    `${p}gost memclear`,
-    "",
-    "AUTO REPLY (chat-wide)",
-    `${p}goston`,
-    `${p}gostoff`,
-    `${p}goststatus`
+    `${p}gost memclear`
   ];
 }
 
 async function sendMenu(m) {
-  const img = await makeMenuCard("GOST AI", menuLines(), 900);
+  const img = await makeMenuCard("GOST AI", menuLines(m), 900);
   if (img) return sendImage(m, img, "");
-  return sendText(m, "GOST AI\n\n" + menuLines().join("\n"));
+  return sendText(m, "GOST AI\n\n" + menuLines(m).join("\n"));
 }
 
+/* ----------------- ROAST ----------------- */
 function roastLevelOf(m) {
   const p = getPrefs(m);
   return (p.roastlevel || "medium").toLowerCase();
 }
 function setRoastLevel(m, lvl) {
   lvl = String(lvl || "").toLowerCase();
-  if (!["soft", "medium", "savage"].includes(lvl)) return null;
+  if (!["soft","medium","savage"].includes(lvl)) return null;
   setPrefs(m, { roastlevel: lvl });
   return lvl;
 }
 async function doRoast(m, targetLabel) {
   const lvl = roastLevelOf(m);
   const instruction =
-    lvl === "soft"
-      ? "Keep it light, friendly, short."
-      : lvl === "savage"
-      ? "Be very witty and sharp, but still no slurs/threats/family curses."
-      : "Be witty, street-smart, not too harsh.";
-  const text = await aiReply(m, `Generate ONE short Nigerian-style witty roast for: ${targetLabel}. ${instruction}`, "roast");
+    lvl === "soft" ? "Keep it light, friendly, short." :
+    lvl === "savage" ? "Be very witty and sharp, but still no slurs/threats/family curses." :
+    "Be witty, street-smart, not too harsh.";
+
+  const text = await aiReply(
+    m,
+    `Generate ONE short Nigerian-style witty roast for: ${targetLabel}. ${instruction}`,
+    "roast"
+  );
   return text.replace(/\s+/g, " ").trim();
 }
-/* ----------------- AUTO-REPLY TOGGLE COMMANDS ----------------- */
-kord(
-  { cmd: "goston|goston", desc: "Turn Gost auto-reply ON (this chat)", fromMe: wtype, type: "tools", react: "✅" },
-  async (m) => {
-    if (!isAllowed(m)) return;
-    setChatSession(m, { autoon: true });
-    return sendText(m, "Gost Auto-Reply: ON (this chat)");
-  }
-);
+/* [PART 2 END] */
+/* [GOST AI v2 — PART 3 / 3] */
 
-kord(
-  { cmd: "gostoff|gostoff", desc: "Turn Gost auto-reply OFF (this chat)", fromMe: wtype, type: "tools", react: "🛑" },
-  async (m) => {
-    if (!isAllowed(m)) return;
-    setChatSession(m, { autoon: false });
-    return sendText(m, "Gost Auto-Reply: OFF (this chat)");
-  }
-);
-
-kord(
-  { cmd: "goststatus|goststat", desc: "Check Gost auto-reply status", fromMe: wtype, type: "tools", react: "ℹ️" },
-  async (m) => {
-    if (!isAllowed(m)) return;
-    const s = getChatSession(m);
-    return sendText(m, `Gost Auto-Reply: ${s.autoon ? "ON" : "OFF"} (this chat)`);
-  }
-);
-
-/* ----------------- MAIN COMMAND ROUTER ----------------- */
+/* ----------------- MAIN COMMAND ----------------- */
 kord(
   {
-    cmd: "gost|gs",
-    desc: "Gost AI (premium assistant)",
+    cmd: "gost|gst",
+    desc: "Gost AI (premium assistant + session auto-reply)",
     fromMe: wtype,
     type: "tools",
-    react: "💎",
+    react: "👻",
   },
   async (m, text) => {
     try {
@@ -485,6 +502,28 @@ kord(
       const rest = args.slice(1).join(" ").trim();
       const p = SAFE_PREFIX();
 
+      // SESSION CONTROLS
+      if (sub === "on") {
+        if (!isAllowed(m)) return;
+        setSession(m, true);
+        return sendText(m, `Session ON. Mode: ${sessionState(m).mode.toUpperCase()}`);
+      }
+      if (sub === "off") {
+        if (!isAllowed(m)) return;
+        setSession(m, false);
+        return sendText(m, "Session OFF.");
+      }
+      if (sub === "mode") {
+        if (!isAllowed(m)) return;
+        const md = setMode(m, rest);
+        if (!md) return sendText(m, `Use: ${p}gost mode tag  OR  ${p}gost mode all`);
+        return sendText(m, `Mode set: ${md.toUpperCase()}`);
+      }
+      if (sub === "status") {
+        const st = sessionState(m);
+        return sendText(m, `Session: ${st.on ? "ON" : "OFF"}\nMode: ${st.mode.toUpperCase()}`);
+      }
+
       if (sub === "menu" || sub === "help") return sendMenu(m);
 
       if (sub === "setup") {
@@ -492,15 +531,13 @@ kord(
         const okW = (process.env.OPENWEATHER_API_KEY || "").trim() ? "✅" : "❌";
         return sendText(
           m,
-          `GOST SETUP\n` +
+          `SETUP\n` +
           `AI Key: ${okAI}\n` +
           `Weather Key: ${okW}\n` +
           `Model: ${MODEL}\n` +
           `Memory: ${memCap()} turns\n` +
           `Cooldown: ${cdSec()}s\n` +
-          `AutoReply Cooldown: ${getVar("GOST_AUTOREPLY_COOLDOWN", "2")}s\n` +
-          `Theme: ${(process.env.GOST_THEME || "neon")}\n\n` +
-          `Try: ${p}gost menu`
+          `Theme: ${(process.env.GOST_THEME || "neon")}`
         );
       }
 
@@ -564,7 +601,7 @@ kord(
         if (m?.mentionedJid?.length) {
           const user = m.mentionedJid[0];
           const roast = await doRoast(m, `@${user.split("@")[0]}`);
-          return sendText(m, withMentions(roast, [user]));
+          return sendText(m, withMentions(`${roast}`, [user]));
         }
         const roast = await doRoast(m, "me");
         return sendText(m, roast);
@@ -574,11 +611,11 @@ kord(
         if (!q) return sendText(m, "Reply to someone’s message, then use: gost lastroast");
         const user = q.sender;
         const roast = await doRoast(m, `@${String(user || "").split("@")[0] || "user"}`);
-        return sendText(m, withMentions(roast, user ? [user] : []));
+        return sendText(m, withMentions(`${roast}`, user ? [user] : []));
       }
 
       // AI MODES
-      const modeMap = new Set(["chat", "coach", "writer", "coder", "translate"]);
+      const modeMap = new Set(["chat","coach","writer","coder","translate"]);
       if (modeMap.has(sub)) {
         if (!rest) return sendText(m, `Use: ${p}gost ${sub} <message>`);
         const out = await aiReply(m, rest, sub);
@@ -592,43 +629,45 @@ kord(
   }
 );
 
-/* ----------------- AUTO-REPLY LISTENER (FIXED: REPLIES TO EVERYONE) ----------------- */
+/* ----------------- AUTO-REPLY LISTENER -----------------
+   When Session is ON:
+   - Mode TAG: only reply when you/bot are mentioned
+   - Mode ALL: reply to everyone
+   Skips commands (prefix) to avoid replying to bot commands.
+-------------------------------------------------------- */
 kord({ on: "all" }, async (m, textArg) => {
   try {
-    if (m?.isBot || m?.isBaileys) return;
+    if (!m) return;
+    if (m?.fromMe) return;
 
-    const ses = getChatSession(m);
-    if (!ses.autoon) return;
+    const st = sessionState(m);
+    if (!st.on) return;
 
-    const raw =
-      (typeof textArg === "string" ? textArg : "") ||
-      m?.message?.conversation ||
-      m?.message?.extendedTextMessage?.text ||
-      m?.text ||
-      m?.body ||
-      "";
+    if (st.mode === "tag" && !isTaggedForSession(m)) return;
 
-    const msg = String(raw || "").trim();
-    if (!msg) return;
+    const txt = getTextFromAny(m, textArg).trim();
+    if (!txt) return;
 
-    const pfx = SAFE_PREFIX();
-    if (msg.startsWith(pfx)) return;
+    const p = SAFE_PREFIX();
+    if (txt.startsWith(p)) return;
 
-    // avoid replying to Gost commands typed without prefix (rare)
-    if (/^(gost|gs)\b/i.test(msg)) return;
+    const cdKey = "auto::" + getChatId(m);
+    const left = checkCooldownKey(cdKey);
+    if (left) return;
 
-    const cd = Math.max(0, Math.min(10, parseInt(getVar("GOST_AUTOREPLY_COOLDOWN", "2"), 10) || 2));
-    const key = "AUTO::" + chatKey(m);
-    const now = Date.now();
-    const last = COOLDOWN.get(key) || 0;
-    if (now - last < cd * 1000) return;
-    COOLDOWN.set(key, now);
+    const name = m?.pushName ? String(m.pushName).trim() : "user";
+    const prompt =
+      `Reply to this WhatsApp message as GOST AI.\n` +
+      `Sender name: ${name}\n` +
+      `Message: ${txt}\n\n` +
+      `Reply short, helpful, and natural.`;
 
-    const out = await aiReply(m, msg, "chat");
-    return await sendText(m, out);
+    const out = await aiReply(m, prompt, "auto");
+    return sendText(m, out);
   } catch {
     return;
   }
 });
 
 module.exports = {};
+/* [PART 3 END] */
